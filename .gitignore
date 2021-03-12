@@ -1,0 +1,6 @@
+.vscode
+*.swp
+.*
+launch.json
+!.gitignore
+__pycache__
