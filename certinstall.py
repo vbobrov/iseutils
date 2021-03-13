@@ -5,6 +5,7 @@ import json
 import re
 import sys
 import argparse
+import urllib3
 import http.client as http_client
 from base64 import b64encode
 
@@ -35,21 +36,25 @@ def ise_get(url,query=None):
 
 def confirm(default_answer):
 	answer=default_answer
-	while not answer in ["yes","no"]:
-		answer=input("(yes/no): ")
+	if default_answer:
+		print(f"(yes/no): {default_answer}")
+	else:
+		while not answer in ["yes","no"]:
+			answer=input("(yes/no): ")
 	return answer
+
 parser=argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,allow_abbrev=False,description="ISE Certificate Import Tool")
-parser.add_argument("-l",help="List all certificates. Other option ignored.",action="store_true")
+parser.add_argument("-l",help="List all certificates. Requires -i, -a and -p. Other options are ignored.",action="store_true")
 parser.add_argument("-i",metavar="<isenode>",help="ISE Node FQDN or IP address",required=True)
 parser.add_argument("-a",metavar="<username>",help="GUI Admin username.",required=True)
 parser.add_argument("-p",metavar="<password>",help="GUI Admin password.",required=True)
 parser.add_argument("-c",metavar="<certfile>",help="Path to certificate file.",type=argparse.FileType("r"))
 parser.add_argument("-k",metavar="<keyfile>",help="Path to key file.",type=argparse.FileType("r"))
 parser.add_argument("-e",metavar="<keypassword>",help="Key encryption password.")
-parser.add_argument("-n",metavar="<node>",help="Node list to install certificate. Space separated",nargs="+")
+parser.add_argument("-n",metavar="<node>",help="Node list to install certificate. Space separated. Specify keyword all to include all nodes in the deployment.",nargs="+")
 parser.add_argument("-u",metavar="<use>",help="Certificate uses (admin,portal,eap,pxgrid,dtls). Space separated. For portal, a non-default tag is specified with portal:<tag>",nargs="*")
-parser.add_argument("-d",metavar="<level>",help="Debug level. 1-Warnig, 2-Verbose, 3-Debug",type=int,default=1,choices=[1,2,3])
 parser.add_argument("-y",help="Accept all warnings without prompts",action="store_const",const="yes")
+parser.add_argument("-d",metavar="<level>",help="Debug level. 1-Warning (default), 2-Verbose, 3-Debug",type=int,default=1,choices=[1,2,3])
 args=parser.parse_args()
 if not args.l:
 	errors=""
@@ -105,12 +110,14 @@ if not args.l:
 			parser.error(f"Invalid certificate use: {import_use}")
 	import_uses=[use.split(":")[0] for use in import_uses]
 ise_base_url=f"https://{ise_pan}/admin"
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ise_session=requests.Session()
+ise_session.headers.update({"referer":ise_base_url})
 ise_session.verify=False
 logging.debug("Loading login page")
-response=ise_session.get(f"{ise_base_url}/login.jsp")
+response=ise_get(f"{ise_base_url}/login.jsp")
 logging.debug("Attempting to login")
-response=ise_session.post(f"{ise_base_url}/LoginAction.do",data={
+response=ise_post("LoginAction.do",data={
 	'username':username,
 	'password':password,
 	'rememberme':'on',
@@ -139,7 +146,8 @@ logging.info(f"PAN Hostname is {pan_hostname}")
 logging.info(f"ISE Version {ise_verion} Patch {ise_patch}")
 logging.debug(f"CSRF Token is {csrf_token}")
 ise_session.headers.update({'OWASP_CSRFTOKEN':csrf_token})
-response=ise_session.get(f"{ise_base_url}/systemCertificatesAction.do",headers={'_QPH_':b64('command=loadGridData')})
+logging.debug(f"Getting certificate list for {pan_hostname}")
+response=ise_get("systemCertificatesAction.do",query="command=loadGridData")
 cert_node_list=json.loads(response.text.replace("'",'"'))['items']
 if args.l:
 	cert_report='''+---------------+----------------------------------------+---------------------+-------------------+-----------+-----------+
@@ -150,7 +158,8 @@ if args.l:
 		if node_idx==0:
 			cert_list=cert_node_list[node_idx]['items']
 		else:
-			response=ise_session.get(f"{ise_base_url}/systemCertificatesAction.do",headers={'_QPH_':b64(f"command=expandNode&nodeId={cert_node}")})
+			logging.debug(f"Getting certificate list for {cert_node}")
+			response=ise_get("systemCertificatesAction.do",query=f"command=expandNode&nodeId={cert_node}")
 			cert_list=json.loads(response.text.replace("'",'"'))['items']
 		for cert in cert_list:
 			cert_report+=f"|{cert_node:<15}|{cert['protocol'][:40]:<40}|{cert['issuedTo'][:20]:<20}|{cert['issuedBy'][:20]:<20}|{cert['validFromDateOnly'][5:]:>11}|{cert['validToDateOnly'][5:]:>11}|\n"
@@ -158,11 +167,13 @@ if args.l:
 	print(cert_report)
 else:
 	valid_nodes=[node["friendlyName"] for node in cert_node_list]
+	if "all" in import_nodes:
+		import_nodes=valid_nodes
 	logging.debug(f"Valid ISE nodes: {','.join(valid_nodes)}")
-	logging.debug("Getting portag group tags")
-	response=ise_session.get(f"{ise_base_url}/addCSRAction.do",headers={'_QPH_':b64('command=getPortalCertificateGroupTags')})
-	portal_tags=[tag["groupTag"] for tag in json.loads(response.text.replace("'",'"'))['items'][1:]]
 	if "portal" in import_uses:
+		logging.debug("Getting portag group tags")
+		response=ise_get("addCSRAction.do",query="command=getPortalCertificateGroupTags")
+		portal_tags=[tag["groupTag"] for tag in json.loads(response.text.replace("'",'"'))['items'][1:]]
 		if not portal_tag in portal_tags:
 			logging.debug(f"New portal tag {portal_tag} specified. Asking for confirmation.")
 			print(f"Create new portal tag {portal_tag}?")
@@ -176,9 +187,9 @@ else:
 		else:
 			logging.debug(f"Using existing portal tag {portal_tag}")
 			cert_uses["crudStub.groupTagDD"]=portal_tag
-	logging.debug("Getting certificate list")
 	wildcard=False
 	for import_node in import_nodes:
+		logging.warning(f"Attempting to install on {import_node}")
 		if not import_node in valid_nodes:
 			logging.error(f"Skipping invalid ISE node {import_node}")
 			continue
@@ -187,7 +198,7 @@ else:
 			if wildcard and import_node!=pan_hostname:
 				logging.warning(f"Skipping non-PAN node {import_node} for wildcard certificate")
 			logging.info(f"Attempting to import certificate on {import_node}")
-			response=ise_session.post(f"{ise_base_url}/importCertificateAction.do",data={
+			response=ise_post("importCertificateAction.do",data={
 				**{
 					'addOperation':'importCertificate',
 					'fipsMode':'off',
@@ -202,7 +213,7 @@ else:
 					('crudStub.certFileToUpload',(pem_file.name,open(pem_file.name,'rb'),'application/x-x509-ca-cert')),
 					('crudStub.keyFileToUpload',(pvk_file.name,open(pvk_file.name,'rb'),'application/octet-stream'))
 				],
-				cookies={'_QPC_':b64(f"command=addSubmit&OWASP_CSRFTOKEN={csrf_token}&nodeId={import_node}")})
+				query=f"command=addSubmit&OWASP_CSRFTOKEN={csrf_token}&nodeId={import_node}")
 			import_status=json.loads(re.match(r"<html><head></head><body><textarea>(.*)</textarea></body></html>",response.text)[1])
 			import_messages=import_status["messages"]
 			logging.debug(f"Import Status: {import_status}")
@@ -213,7 +224,7 @@ else:
 				elif len(import_messages)>1:
 					if import_messages[1]=="list-parameter-flag":
 						domain_object=import_status["domainObject"]
-						logging.info(f"Certificate Imported on {import_node} with warnings: {import_messages[0]} {','.join(domain_object)}")
+						logging.warning(f"Certificate Imported on {import_node} with warnings: {import_messages[0]} {','.join(domain_object)}")
 						break
 					elif "verify-" in import_messages[1] or "warning-" in import_messages[0]:
 						logging.info("Import warning confirmation required")
@@ -240,7 +251,7 @@ else:
 							logging.warning(f"Import warming rejected. Import aborted")
 							break
 					else:
-						logging.info(f"Certificate Successfully Imported on {import_node}: {':'.join(import_messages)}")
+						logging.warning(f"Certificate Successfully Imported on {import_node}: {':'.join(import_messages)}")
 						break
 				else:
 					logging.error("Unexpected condition occured")
