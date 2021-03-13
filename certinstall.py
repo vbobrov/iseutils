@@ -13,31 +13,37 @@ def b64(input_string):
 	return b64encode(input_string.encode()).decode()
 
 def ise_post(url,query=None,**kwargs):
-	global ise_session,ise_base_url,logging
-	if query:
-		cookies={"_QPC_":b64(query)}
-	else:
-		cookies={}
+	global ise_session,ise_base_url,logging,cookie_param
 	logging.debug(f"POST query {query} to {ise_base_url}/{url}")
-	response=ise_session.post(f"{ise_base_url}/{url}",cookies=cookies,**kwargs)
+	if cookie_param:
+		if query:
+			cookies={"_QPC_":b64(query)}
+		else:
+			cookies={}
+		response=ise_session.post(f"{ise_base_url}/{url}",cookies=cookies,**kwargs)
+	else:
+		response=ise_session.post(f"{ise_base_url}/{url}?{query}",**kwargs)
 	response.raise_for_status()
 	return response
 
 def ise_get(url,query=None):
-	global ise_session,ise_base_url,logging
-	if query:
-		headers={"_QPH_":b64(query)}
-	else:
-		headers={}
+	global ise_session,ise_base_url,logging,cookie_param
 	logging.debug(f"GET query {query} to {ise_base_url}/{url}")
-	response=ise_session.get(f"{ise_base_url}/{url}",headers=headers)
+	if cookie_param:
+		if query:
+			headers={"_QPH_":b64(query)}
+		else:
+			headers={}
+		response=ise_session.get(f"{ise_base_url}/{url}",headers=headers)
+	else:
+		response=ise_session.get(f"{ise_base_url}/{url}?{query}")
 	response.raise_for_status()
 	return response
 
 def confirm(default_answer):
 	answer=default_answer
 	if default_answer:
-		print(f"(yes/no): {default_answer}")
+		print(f"(yes/no): {default_answer} (auto)")
 	else:
 		while not answer in ["yes","no"]:
 			answer=input("(yes/no): ")
@@ -114,6 +120,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ise_session=requests.Session()
 ise_session.headers.update({"referer":ise_base_url})
 ise_session.verify=False
+cookie_param=False
+logging.debug("Determining cookie based query passing")
+response=ise_get("JavaScriptServlet")
+if re.match(r".*_QPH_.*",response.text,re.S):
+	cookie_param=True
+	logging.debug("Using cookie based parameters. 2.4+")
+else:
+	logging.debug("Using query strings parameters. <2.4")
 logging.debug("Loading login page")
 response=ise_get(f"{ise_base_url}/login.jsp")
 logging.debug("Attempting to login")
