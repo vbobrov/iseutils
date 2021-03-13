@@ -8,7 +8,7 @@
 
 **No internal product information was used to develop this tool. It was created exclusively by analyzing interaction between Firefox and ISE using Web Console and simulating the same requests with Python.**
 
-It is compatible with ISE 2.4 and above.
+It was tested with ISE 2.2 and above. It may work with ealier version.
 
 This tool can perform most of the system certificate import functions available through ISE GUI.
 
