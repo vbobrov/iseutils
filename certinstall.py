@@ -165,7 +165,7 @@ logging.debug(f"Getting certificate list for {pan_hostname}")
 response=ise_get("systemCertificatesAction.do",query="command=loadGridData")
 cert_node_list=json.loads(response.text.replace("'",'"'))['items']
 if args.l:
-	cert_report='''+---------------+---------------------------------------+---------------------+--------------------+-----------+-----------+
+	cert_report='''+---------------+----------------------------------------+--------------------+--------------------+-----------+-----------+
 |   ISE Node    |               Protocol                 |   Issued To        |    Issued By       | Valid From| Valid To  |
 +---------------+----------------------------------------+--------------------+--------------------+-----------+-----------+\n'''
 	for node_idx in range(0,len(cert_node_list)):
