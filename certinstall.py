@@ -176,8 +176,11 @@ if args.l:
 			logging.debug(f"Getting certificate list for {cert_node}")
 			response=ise_get("systemCertificatesAction.do",query=f"command=expandNode&nodeId={cert_node}")
 			cert_list=json.loads(response.text.replace("'",'"'))['items']
-		for cert in cert_list:
-			cert_report+=f"|{cert_node:<15}|{cert['protocol'][:40]:<40}|{cert['issuedTo'][:20]:<20}|{cert['issuedBy'][:20]:<20}|{cert['validFromDateOnly'][5:]:>11}|{cert['validToDateOnly'][5:]:>11}|\n"
+		if cert_list:
+			for cert in cert_list:
+				cert_report+=f"|{cert_node:<15}|{cert['protocol'][:40]:<40}|{cert['issuedTo'][:20]:<20}|{cert['issuedBy'][:20]:<20}|{cert['validFromDateOnly'][5:]:>11}|{cert['validToDateOnly'][5:]:>11}|\n"
+		else:
+			cert_report+=f"|{cert_node:<15}| Node is not responding                                                                                   |\n"
 		cert_report+='+---------------+----------------------------------------+--------------------+--------------------+-----------+-----------+\n'
 	print(cert_report)
 else:
