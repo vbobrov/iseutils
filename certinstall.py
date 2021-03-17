@@ -59,6 +59,7 @@ parser.add_argument("-k",metavar="<keyfile>",help="Path to key file.",type=argpa
 parser.add_argument("-e",metavar="<keypassword>",help="Key encryption password.")
 parser.add_argument("-n",metavar="<node>",help="Node list to install certificate. Space separated. Specify keyword all to include all nodes in the deployment.",nargs="+")
 parser.add_argument("-u",metavar="<use>",help="Certificate uses (admin,portal,eap,pxgrid,dtls). Space separated. For portal, a non-default tag is specified with portal:<tag>",nargs="*")
+parser.add_argument("-r",help="Prevent node restart if required. Use with caution.",action="store_false",default=True)
 parser.add_argument("-y",help="Accept all warnings without prompts",action="store_const",const="yes")
 parser.add_argument("-d",metavar="<level>",help="Debug level. 1-Warning (default), 2-Verbose, 3-Debug",type=int,default=1,choices=[1,2,3])
 args=parser.parse_args()
@@ -145,13 +146,13 @@ response=ise_post("LoginAction.do",data={
 })
 try:
 	ise_verion=re.match(r'.*<div id="softwareVersion" style="display:none">([0-9\.]+)</div>.*',response.text,re.S)[1]
-except:
-	logging.error("Login failed")
+except TypeError:
+	logging.error("ISE Login failed")
 	sys.exit(1)
 try:
 	ise_patches=re.match(r'.*<div id="patch" style="display:none">([0-9\,]+)</div>.*',response.text,re.S)[1].split(",")
 	ise_patch=max([int(i) for i in ise_patches])
-except:
+except TypeError:
 	ise_patch=0
 csrf_token=re.match(r".*OWASP_CSRFTOKEN=([0-9A-Z\-]+).*",response.text,re.S)[1]
 pan_hostname=re.match(r'.*"theHostName" : "([^"]+)",.*',response.text,re.S)[1]
@@ -159,14 +160,14 @@ logging.info("Login successful")
 logging.info(f"PAN Hostname is {pan_hostname}")
 logging.info(f"ISE Version {ise_verion} Patch {ise_patch}")
 logging.debug(f"CSRF Token is {csrf_token}")
-ise_session.headers.update({'OWASP_CSRFTOKEN':csrf_token})
+ise_session.headers.update({"OWASP_CSRFTOKEN":csrf_token,"X-Requested-With":"XMLHttpRequest, OWASP CSRFGuard Project"})
 logging.debug(f"Getting certificate list for {pan_hostname}")
 response=ise_get("systemCertificatesAction.do",query="command=loadGridData")
 cert_node_list=json.loads(response.text.replace("'",'"'))['items']
 if args.l:
-	cert_report='''+---------------+----------------------------------------+---------------------+-------------------+-----------+-----------+
-|   ISE Node    |               Protocol                 |   Issued To         |    Issued By      | Valid From| Valid To  |
-+---------------+----------------------------------------+---------------------+-------------------+-----------+-----------+\n'''
+	cert_report='''+---------------+---------------------------------------+---------------------+--------------------+-----------+-----------+
+|   ISE Node    |               Protocol                 |   Issued To        |    Issued By       | Valid From| Valid To  |
++---------------+----------------------------------------+--------------------+--------------------+-----------+-----------+\n'''
 	for node_idx in range(0,len(cert_node_list)):
 		cert_node=cert_node_list[node_idx]['friendlyName']
 		if node_idx==0:
@@ -177,7 +178,7 @@ if args.l:
 			cert_list=json.loads(response.text.replace("'",'"'))['items']
 		for cert in cert_list:
 			cert_report+=f"|{cert_node:<15}|{cert['protocol'][:40]:<40}|{cert['issuedTo'][:20]:<20}|{cert['issuedBy'][:20]:<20}|{cert['validFromDateOnly'][5:]:>11}|{cert['validToDateOnly'][5:]:>11}|\n"
-		cert_report+='+---------------+----------------------------------------+---------------------+-------------------+-----------+-----------+\n'
+		cert_report+='+---------------+----------------------------------------+--------------------+--------------------+-----------+-----------+\n'
 	print(cert_report)
 else:
 	valid_nodes=[node["friendlyName"] for node in cert_node_list]
@@ -201,6 +202,9 @@ else:
 		else:
 			logging.debug(f"Using existing portal tag {portal_tag}")
 			cert_uses["crudStub.groupTagDD"]=portal_tag
+	logging.debug("Getting deployment nodes")
+	response=ise_get("deploymentAction.do",query="command=loadGridData")
+	node_fqdns={node["hostName"]:node["fqdn"] for node in json.loads(response.text.replace("'",'"'))['items']}
 	wildcard=False
 	for import_node in import_nodes:
 		logging.warning(f"Attempting to install on {import_node}")
@@ -211,6 +215,7 @@ else:
 		while True:
 			if wildcard and import_node!=pan_hostname:
 				logging.warning(f"Skipping non-PAN node {import_node} for wildcard certificate")
+				break
 			logging.info(f"Attempting to import certificate on {import_node}")
 			response=ise_post("importCertificateAction.do",data={
 				**{
@@ -231,45 +236,46 @@ else:
 			import_status=json.loads(re.match(r"<html><head></head><body><textarea>(.*)</textarea></body></html>",response.text)[1])
 			import_messages=import_status["messages"]
 			logging.debug(f"Import Status: {import_status}")
+			prompt_key=None
+			additional_info=""
+			prompt_message=""
+			node_restart=False
+			for message in import_messages:
+				if message=="list-parameter-flag":
+					additional_info=",".join(import_status["domainObject"])
+				elif "warning-" in message or "verify-" in message:
+					prompt_key=message
+				elif message=="restart required":
+					node_restart=args.r
+				else:
+					prompt_message+=message+" "
+			prompt_message+=f" {additional_info}"
 			if import_status["status"]=="passed":
-				if len(import_messages)==1:
-					logging.warning(f"Certificate Successfully Imported on {import_node}: {import_messages[0]}")
-					break
-				elif len(import_messages)>1:
-					if import_messages[1]=="list-parameter-flag":
-						domain_object=import_status["domainObject"]
-						logging.warning(f"Certificate Imported on {import_node} with warnings: {import_messages[0]} {','.join(domain_object)}")
-						break
-					elif "verify-" in import_messages[1] or "warning-" in import_messages[0]:
-						logging.info("Import warning confirmation required")
-						if "verify-" in import_messages[1]:
-							prompt_text=import_messages[0]
-							prompt_key=import_messages[1]
-						else:
-							prompt_text=import_messages[1]
-							prompt_key=import_messages[0]
-						if prompt_key=="verify-replace-wildcard":
-							wildcard=True
-							logging.debug("Wildcard certificate detected")
-						print(prompt_text)
-						try:
-							if import_messages[2]=="list-parameter-flag":
-								domain_object=import_status["domainObject"]
-								print(",".join(domain_object))
-						except:
-							pass
+				if prompt_key:
+					try:
+						logging.info(f"Import warning confirmation {prompt_key} required")
+						wildcard=wildcard or prompt_key=="verify-replace-wildcard"
+						print(prompt_message)
 						if confirm(args.y)=="yes":
 							logging.info("Import warning accepted")
 							confirmations[import_confirmations[prompt_key]]="on"
 						else:
 							logging.warning(f"Import warming rejected. Import aborted")
 							break
-					else:
-						logging.warning(f"Certificate Successfully Imported on {import_node}: {':'.join(import_messages)}")
+					except KeyError:
+						logging.error(f"Unexpected prompt. {prompt_message} {prompt_key}.")
 						break
 				else:
-					logging.error("Unexpected condition occured")
+					logging.warning(f"Certificate Successfully Imported on {import_node}: {prompt_message}")
+					if node_restart:
+						logging.debug(f"Restart required on {import_node}")
+						response=ise_post("restartAction.do",query=f"command=restartRemoteNode&node={node_fqdns[import_node]}")
+						restart_status=json.loads(response.text)
+						if restart_status["status"]=="passed":
+							logging.warning(f"Restart of {import_node} initiated: {restart_status['messages'][0]}")
+						else:
+							logging.error(f"Restart of {import_node} failed: {restart_status['messages'][0]}")
 					break
 			else:
-				logging.error(f"Import failed: {import_messages[0]}")
+				logging.error(f"Certificate Import failed on {import_node}: {prompt_message}")
 				break

@@ -18,6 +18,8 @@ When a certificate is submitted to ISE backend, it replies with errors or warnin
 
 -y option can be specified to automatically accept all the warnings. When -y is specified, the warnings are still shown on the screen, but they don't need to be accepted interactively.
 
+-r option will prevent the nodes from being restarted when required by installation of an Admin certificate or any other reason that may require a restart. Use this option with caution as it is not the expected flow of installing certificates
+
 -n option allows the certificate to be install on multiple nodes. When a wildcard certificate is imported, all nodes except for Primary Admin are skipped. That is because wildcard certificates are shared on all nodes.
 
 -n accepts *all* as the keyword to include all the nodes in the deployment
@@ -50,6 +52,7 @@ Here's full usage options supported.
       -u [<use> [<use> ...]]
                             Certificate uses (admin,portal,eap,pxgrid,dtls). Space separated. For portal, a non-default tag is
                             specified with portal:<tag>
+      -r                    Prevent node restart if required. Use with caution.
       -y                    Accept all warnings without prompts
       -d <level>            Debug level. 1-Warning (default), 2-Verbose, 3-Debug
 ### Example 1
