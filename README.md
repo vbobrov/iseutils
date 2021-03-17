@@ -30,7 +30,7 @@ if -u option is omitted, the certificate is imported as Not in Use. To specify a
 
 This tool requires *python 3* and *requests* module
 
-Here's full usage options supported.
+Here's full usage and options supported.
 
     usage: certinstall.py [-h] [-l] -i <isenode> -a <username> -p <password> [-c <certfile>] [-k <keyfile>] [-e <keypassword>]
                           [-n <node> [<node> ...]] [-u [<use> [<use> ...]]] [-y] [-d <level>]
@@ -41,17 +41,15 @@ Here's full usage options supported.
       -h, --help            show this help message and exit
       -l                    List all certificates. Requires -i, -a and -p. Other options are ignored.
       -i <isenode>          ISE Node FQDN or IP address
-      -a <username>         GUI Admin username.
-      -p <password>         GUI Admin password.
-      -c <certfile>         Path to certificate file.
-      -k <keyfile>          Path to key file.
-      -e <keypassword>      Key encryption password.
+      -a <username>         GUI Admin username
+      -p <password>         GUI Admin password
+      -c <certfile>         Path to certificate file
+      -k <keyfile>          Path to key file
+      -e <keypassword>      Key encryption password
       -n <node> [<node> ...]
-                            Node list to install certificate. Space separated. Specify keyword all to include all nodes in the
-                            deployment.
+                            Node list to install certificate. Space separated. Specify keyword all to include all nodes in the deployment.
       -u [<use> [<use> ...]]
-                            Certificate uses (admin,portal,eap,pxgrid,dtls). Space separated. For portal, a non-default tag is
-                            specified with portal:<tag>
+                            Certificate uses (admin,portal,eap,pxgrid,dtls). Space separated. For portal, a non-default tag is specified with portal:<tag>
       -r                    Prevent node restart if required. Use with caution.
       -y                    Accept all warnings without prompts
       -d <level>            Debug level. 1-Warning (default), 2-Verbose, 3-Debug
