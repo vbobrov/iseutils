@@ -58,7 +58,7 @@ parser.add_argument("-c",metavar="<certfile>",help="Path to certificate file.",t
 parser.add_argument("-k",metavar="<keyfile>",help="Path to key file.",type=argparse.FileType("r"))
 parser.add_argument("-e",metavar="<keypassword>",help="Key encryption password.")
 parser.add_argument("-n",metavar="<node>",help="Node list to install certificate. Space separated. Specify keyword all to include all nodes in the deployment.",nargs="+")
-parser.add_argument("-u",metavar="<use>",help="Certificate uses (admin,portal,eap,pxgrid,dtls). Space separated. For portal, a non-default tag is specified with portal:<tag>",nargs="*")
+parser.add_argument("-u",metavar="<use>",help="Certificate uses (admin,portal,eap,pxgrid,dtls). Space separated. For portal, a non-default tag is specified with portal:<tag>",nargs="*",default=[])
 parser.add_argument("-r",help="Prevent node restart if required. Use with caution.",action="store_false",default=True)
 parser.add_argument("-y",help="Accept all warnings without prompts",action="store_const",const="yes")
 parser.add_argument("-d",metavar="<level>",help="Debug level. 1-Warning (default), 2-Verbose, 3-Debug",type=int,default=1,choices=[1,2,3])
@@ -79,14 +79,14 @@ debug_level=[logging.WARNING,logging.INFO,logging.DEBUG][args.d-1]
 if args.d==3:
 	http_client.HTTPConnection.debuglevel = 1
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',level=debug_level)
-requests_log = logging.getLogger("requests.packages.urllib3")
+requests_log=logging.getLogger("requests.packages.urllib3")
 requests_log.setLevel(debug_level)
 requests_log.propagate=True
 username=args.a
 password=args.p
 ise_pan=args.i
 import_nodes=args.n
-import_uses=args.u if args.u else []
+import_uses=args.u
 pem_file=args.c
 pvk_file=args.k
 key_password=args.e
