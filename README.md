@@ -6,9 +6,9 @@
 
 **Disclaimer: This tool simulates required browser transactions to automate certificate installation. This tool will not be supported by Cisco. Use at your own risk.**
 
-**No internal product information was used to develop this tool. It was created exclusively by analyzing interaction between Firefox and ISE using Web Console and simulating the same requests with Python.**
+**No internal product information was used to develop this tool. It was created exclusively by analyzing interaction between Firefox and ISE using Web Developer Console and simulating the same requests with Python.**
 
-It was tested with ISE 2.2 and above. It may work with ealier version.
+This tool was tested with ISE 2.2 and above. It may work with earlier version.
 
 This tool can perform most of the system certificate import functions available through ISE GUI.
 
@@ -20,7 +20,7 @@ When a certificate is submitted to ISE backend, it replies with errors or warnin
 
 -r option will prevent the nodes from being restarted when required by installation of an Admin certificate or any other reason that may require a restart. Use this option with caution as it is not the expected flow of installing certificates
 
--n option allows the certificate to be install on multiple nodes. When a wildcard certificate is imported, all nodes except for Primary Admin are skipped. That is because wildcard certificates are shared on all nodes.
+-n option allows the certificate to be install on multiple nodes. When a wildcard certificate is imported, all nodes except for Primary Admin are skipped. That is because wildcard certificates are shared on all nodes. If Primary Admin node is specified in the list, it is moved to the very end of the list to avoid a restart in the middle of certificate installation. If any invalid nodes are specified, they're silently removed. If no nodes remain after removal, the tool will display an error and exit.
 
 -n accepts *all* as the keyword to include all the nodes in the deployment
 
