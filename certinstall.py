@@ -110,7 +110,7 @@ import_confirmations={
 	"warning-expiry-398": "crudStub.isExpiry398"
 }
 
-# supported certificates uses for import
+# supported certificates uses for import and their form field names
 valid_cert_uses={
 	"portal":"crudStub.portalCertificate",
 	"admin":"crudStub.managementInterfaceCertificate",
@@ -125,6 +125,7 @@ if not args.l:
 	for import_use in import_uses:
 		try:
 			# populate cert_uses that will be posted to ISE when importing the certificate
+			# strip off the portal tag if supplied
 			cert_uses[valid_cert_uses[import_use.split(":")[0]]]="on"
 			if "portal" in import_use:
 				if re.match(r"portal:(.+)",import_use):
@@ -149,7 +150,7 @@ ise_session.verify=False
 
 # starting with 2.4, query parameters are supplied to ISE in either
 # _QPH_ header variable or _QPC_ cookie
-# JavaScriptServlet is one of the pages that contains Javascript code to add _QPH_ header
+# /admin/JavaScriptServlet is one of the pages that contains Javascript code to add _QPH_ header
 # using this code to detect which method is used for query strings instead of using ISE version
 # this page does not require valid authentication to ISE
 cookie_param=False
@@ -187,6 +188,8 @@ except TypeError:
 	sys.exit(1)
 
 try:
+	# this field on the page contains comma-separated list of all patches
+	# only the highest number will be parsed out
 	ise_patches=re.match(r'.*<div id="patch" style="display:none">([0-9\,]+)</div>.*',response.text,re.S)[1].split(",")
 	ise_patch=max([int(i) for i in ise_patches])
 except TypeError:
@@ -196,15 +199,15 @@ except TypeError:
 
 # retrieve CSRF token
 csrf_token=re.match(r".*OWASP_CSRFTOKEN=([0-9A-Z\-]+).*",response.text,re.S)[1]
+logging.debug(f"CSRF Token is {csrf_token}")
+
+# some ISE pages validate X-Requested-With header
+ise_session.headers.update({"OWASP_CSRFTOKEN":csrf_token,"X-Requested-With":"XMLHttpRequest, OWASP CSRFGuard Project"})
 
 pan_hostname=re.match(r'.*"theHostName" : "([^"]+)",.*',response.text,re.S)[1]
 logging.info("Login successful")
 logging.info(f"PAN Hostname is {pan_hostname}")
 logging.info(f"ISE Version {ise_verion} Patch {ise_patch}")
-logging.debug(f"CSRF Token is {csrf_token}")
-
-# some ISE pages validate X-Requested-With header
-ise_session.headers.update({"OWASP_CSRFTOKEN":csrf_token,"X-Requested-With":"XMLHttpRequest, OWASP CSRFGuard Project"})
 
 # loading System Certificate screen.
 # just like in the GUI, it only contains details about PAN certificate
@@ -212,7 +215,7 @@ ise_session.headers.update({"OWASP_CSRFTOKEN":csrf_token,"X-Requested-With":"XML
 logging.debug(f"Getting certificate list for {pan_hostname}")
 response=ise_get("systemCertificatesAction.do",query="command=loadGridData")
 
-# most json data returned by ISE is misfornatted with single quotes.
+# most json data returned by ISE is misformatted with single quotes.
 # replacement with double-quotes is required for json.loads
 cert_node_list=json.loads(response.text.replace("'",'"'))['items']
 
@@ -253,6 +256,20 @@ else:
 
 	logging.debug(f"Valid ISE nodes: {','.join(valid_nodes)}")
 
+	# eliminating any invalid nodes
+	import_nodes=list(set(import_nodes).intersection(valid_nodes))
+	if not import_nodes:
+		logging.error("No valid nodes specified for import")
+		sys.exit(1)
+
+	# move PAN name to the end
+	try:
+		import_nodes.remove(pan_hostname)
+		logging.debug(f"Moving PAN {pan_hostname} to the end in case restart is needed")
+		import_nodes.append(pan_hostname)
+	except ValueError:
+		pass
+
 	# validating portal tags
 	if "portal" in import_uses:
 		logging.debug("Getting portag group tags")
@@ -291,10 +308,6 @@ else:
 
 	for import_node in import_nodes:
 		logging.warning(f"Attempting to install on {import_node}")
-
-		if not import_node in valid_nodes:
-			logging.error(f"Skipping invalid ISE node {import_node}")
-			continue
 
 		# dict containing warnings/prompts that the user accepted
 		# confirmations are submitted along with other POST data
