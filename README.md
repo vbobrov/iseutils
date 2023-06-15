@@ -11,6 +11,8 @@
 
 This tool simulates MDM connectivity to Intune the same way as ISE connecting to Intune.
 
+Be sure to check out my post about ISE and Intune integration at https://www.securityccie.net/2023/02/09/intune-for-ise-engineer/
+
 This tool requires the same parameters that ISE uses to reach Intune:
 - Tenant ID
 - Client ID aka App Registration ID
