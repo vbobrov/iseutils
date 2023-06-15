@@ -26,6 +26,7 @@ This tool can perform 4 common functions that are used by ISE
 - Query a single device by GUID
 
 Here is full usage help for the tool:
+
     usage: intune.py [-h] -a <appid> -t <tenantid> -c <certfile> -k <keyfile> (-i | -l | -q <id>) [-d <level>]
 
     ISE Intune Test Tool
