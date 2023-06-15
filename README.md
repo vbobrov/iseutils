@@ -2,7 +2,132 @@
 
   These tools provide some helpful functions to interact with ISE
 
+## Installation
+
+    git clone https://github.com/vbobrov/iseutils
+    pip install -r requirements.txt
+
+## intune.py
+
+This tool simulates MDM connectivity to Intune the same way as ISE connecting to Intune.
+
+This tool requires the same parameters that ISE uses to reach Intune:
+- Tenant ID
+- Client ID aka App Registration ID
+- Admin Certificate of ISE Node
+- Private Key for the Admin certificate. Key must not be password protected.
+
+This tool can perform 3 common functions that are used by ISE
+- Get a list of all Non-Compliant devices. This is what ISE performs periodicaly at Polling Interval
+- Query a single device by MAC address
+- Query a single device by GUID
+
+Here is full usage help for the tool:
+    usage: intune.py [-h] -a <appid> -t <tenantid> -c <certfile> -k <keyfile> [-d <level>] (-i <id> | -l)
+
+    ISE Intune Test Tool
+
+    options:
+    -h, --help     show this help message and exit
+    -a <appid>     Azure Client or App ID
+    -t <tenantid>  Azure Tenant ID
+    -c <certfile>  Path to certificate file
+    -k <keyfile>   Path to key file
+    -d <level>     Debug level. 1-Warning (default), 2-Verbose, 3-Debug
+    -i <id>        Device ID (GUID or MAC)
+    -l             List all non-compliant devices
+
+### Example 1 - Non-Compliant List
+
+    python intune.py -l -a ffffffff-051c-425d-9e37-ffffffffffff -t ffffffff-252f-408e-8953-ffffffffffff -c .intune.cer -k .intune.key
+    <?xml version="1.0" ?>
+    <ise_api xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Intune.ResourceAccess.ComplianceRetrievalService.Model">
+            <name>attributes</name>
+            <api_version>3</api_version>
+            <paging_info>0</paging_info>
+            <deviceList>
+                    <device>
+                            <guid>3eeb9e62-cec9-4dd8-9dd6-74903695a62b</guid>
+                            <Attributes>
+                                    <guid>3eeb9e62-cec9-4dd8-9dd6-74903695a62b</guid>
+                                    <register_status>true</register_status>
+                                    <Compliance>
+                                            <status>false</status>
+                                    </Compliance>
+                            </Attributes>
+                    </device>
+                    <device>
+                            <guid>b537124a-cfd8-430e-8143-c0cc074ad3cb</guid>
+                            <Attributes>
+                                    <guid>b537124a-cfd8-430e-8143-c0cc074ad3cb</guid>
+                                    <register_status>true</register_status>
+                                    <Compliance>
+                                            <status>false</status>
+                                    </Compliance>
+                            </Attributes>
+                    </device>
+                    <device>
+                            <guid>ee9d3792-6859-4b71-93aa-56aba42581c5</guid>
+                            <Attributes>
+                                    <guid>ee9d3792-6859-4b71-93aa-56aba42581c5</guid>
+                                    <register_status>true</register_status>
+                                    <Compliance>
+                                            <status>false</status>
+                                    </Compliance>
+                            </Attributes>
+                    </device>
+            </deviceList>
+    </ise_api>
+
+### Example 2 - Query by MAC
+
+    python intune.py -i 00:50:56:A4:89:5A -a ffffffff-051c-425d-9e37-ffffffffffff -t ffffffff-252f-408e-8953-ffffffffffff -c .intune.cer -k .intune.key
+    <?xml version="1.0" ?>
+    <ise_api>
+            <name>attributes</name>
+            <api_version>2</api_version>
+            <paging_info>0</paging_info>
+            <deviceList>
+                    <device>
+                            <attributes>
+                                    <register_status>true</register_status>
+                                    <compliance>
+                                            <status>false</status>
+                                    </compliance>
+                                    <pin_lock_on>false</pin_lock_on>
+                                    <model>VMware Virtual Platform</model>
+                                    <udid/>
+                                    <serial_number>VMware-422461a80090e4c2-0e2c2f2ba2eefe60</serial_number>
+                                    <os_version>10.0.19043.2006</os_version>
+                            </attributes>
+                    </device>
+            </deviceList>
+    </ise_api>
+
+### Example 3 - Query by GUID
+
+    python intune.py -i ee9d3792-6859-4b71-93aa-56aba42581c5 -a ffffffff-051c-425d-9e37-ffffffffffff -t ffffffff-252f-408e-8953-ffffffffffff -c .intune.cer -k .intune.key
+    <?xml version="1.0" ?>
+    <ise_api xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Intune.ResourceAccess.ComplianceRetrievalService.Model">
+            <name>attributes</name>
+            <api_version>3</api_version>
+            <deviceList>
+                    <device>
+                            <guid>ee9d3792-6859-4b71-93aa-56aba42581c5</guid>
+                            <Attributes>
+                                    <guid>ee9d3792-6859-4b71-93aa-56aba42581c5</guid>
+                                    <register_status>true</register_status>
+                                    <Compliance>
+                                            <status>false</status>
+                                    </Compliance>
+                            </Attributes>
+                    </device>
+            </deviceList>
+    </ise_api>
+
 ## certinstall.py
+
+**Note: This tool is no longer needed in ISE 3.0 and above. There are now official APIs to import certificates**
 
 **Disclaimer: This tool simulates required browser transactions to automate certificate installation. This tool will not be supported by Cisco. Use at your own risk.**
 
