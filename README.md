@@ -19,13 +19,14 @@ This tool requires the same parameters that ISE uses to reach Intune:
 - Admin Certificate of ISE Node
 - Private Key for the Admin certificate. Key must not be password protected.
 
-This tool can perform 3 common functions that are used by ISE
+This tool can perform 4 common functions that are used by ISE
+- Get MDM Info Version 2 and 3
 - Get a list of all Non-Compliant devices. This is what ISE performs periodicaly at Polling Interval
 - Query a single device by MAC address
 - Query a single device by GUID
 
 Here is full usage help for the tool:
-    usage: intune.py [-h] -a <appid> -t <tenantid> -c <certfile> -k <keyfile> [-d <level>] (-i <id> | -l)
+    usage: intune.py [-h] -a <appid> -t <tenantid> -c <certfile> -k <keyfile> (-i | -l | -q <id>) [-d <level>]
 
     ISE Intune Test Tool
 
@@ -35,11 +36,42 @@ Here is full usage help for the tool:
     -t <tenantid>  Azure Tenant ID
     -c <certfile>  Path to certificate file
     -k <keyfile>   Path to key file
-    -d <level>     Debug level. 1-Warning (default), 2-Verbose, 3-Debug
-    -i <id>        Device ID (GUID or MAC)
+    -i             Get MDM Info
     -l             List all non-compliant devices
+    -q <id>        Query Intune by Device ID (GUID or MAC)
+    -d <level>     Debug level. 1-Warning (default), 2-Verbose, 3-Debug
 
-### Example 1 - Non-Compliant List
+### Example 1 - MDM Info
+    python intune.py -i -a ffffffff-051c-425d-9e37-ffffffffffff -t ffffffff-252f-408e-8953-ffffffffffff -c .intune.cer -k .intune.key 
+    Version 2 Info:
+    <?xml version="1.0" ?>
+    <ise_api>
+            <name>mdminfo</name>
+            <api_version>2</api_version>
+            <api_path>/StatelessNacService/ciscodeviceinfo/mdm/api</api_path>
+            <redirect_url>https://portal.manage.microsoft.com/networkaccesscontrol/index</redirect_url>
+            <query_max_size>100</query_max_size>
+            <messaging_support>false</messaging_support>
+            <vendor>Microsoft</vendor>
+            <product_name>Microsoft Intune</product_name>
+            <product_version>5.0</product_version>
+    </ise_api>
+
+    Version 3 Info:
+    <?xml version="1.0" ?>
+    <ise_api xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Intune.ResourceAccess.ComplianceRetrievalService.Model">
+            <name>mdminfo</name>
+            <api_version>3</api_version>
+            <api_path>/TrafficGateway/TrafficRoutingService/ResourceAccess/ComplianceRetrievalService/cisco</api_path>
+            <redirect_url>https://portal.manage.microsoft.com/networkaccesscontrol/index</redirect_url>
+            <query_max_size>100</query_max_size>
+            <messaging_support>false</messaging_support>
+            <vendor>Microsoft</vendor>
+            <product_name>Microsoft Intune</product_name>
+            <product_version>5.0</product_version>
+    </ise_api>
+
+### Example 2 - Non-Compliant List
 
     python intune.py -l -a ffffffff-051c-425d-9e37-ffffffffffff -t ffffffff-252f-408e-8953-ffffffffffff -c .intune.cer -k .intune.key
     <?xml version="1.0" ?>
@@ -81,9 +113,9 @@ Here is full usage help for the tool:
             </deviceList>
     </ise_api>
 
-### Example 2 - Query by MAC
+### Example 3 - Query by MAC
 
-    python intune.py -i 00:50:56:A4:89:5A -a ffffffff-051c-425d-9e37-ffffffffffff -t ffffffff-252f-408e-8953-ffffffffffff -c .intune.cer -k .intune.key
+    python intune.py -q 00:50:56:A4:89:5A -a ffffffff-051c-425d-9e37-ffffffffffff -t ffffffff-252f-408e-8953-ffffffffffff -c .intune.cer -k .intune.key
     <?xml version="1.0" ?>
     <ise_api>
             <name>attributes</name>
@@ -106,9 +138,9 @@ Here is full usage help for the tool:
             </deviceList>
     </ise_api>
 
-### Example 3 - Query by GUID
+### Example 4 - Query by GUID
 
-    python intune.py -i ee9d3792-6859-4b71-93aa-56aba42581c5 -a ffffffff-051c-425d-9e37-ffffffffffff -t ffffffff-252f-408e-8953-ffffffffffff -c .intune.cer -k .intune.key
+    python intune.py -q ee9d3792-6859-4b71-93aa-56aba42581c5 -a ffffffff-051c-425d-9e37-ffffffffffff -t ffffffff-252f-408e-8953-ffffffffffff -c .intune.cer -k .intune.key
     <?xml version="1.0" ?>
     <ise_api xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Intune.ResourceAccess.ComplianceRetrievalService.Model">
             <name>attributes</name>

@@ -7,6 +7,7 @@ import re
 import argparse
 import logging
 import sys
+import json
 import xml.dom.minidom
 import http.client as http_client
 from pprint import pformat
@@ -15,26 +16,49 @@ from cryptography.hazmat.primitives import serialization
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 
+def print_response(text):
+    try:
+        logging.debug(f"Received JSON: {pformat(json.loads(text))}")
+    except:
+        try:
+            logging.debug(f"Received XML: {xml.dom.minidom.parseString(text).toprettyxml()}")
+        except:
+            logging.debug(f"Received Text: {text}")
+
+
+def http_get(url,headers):
+    r=requests.get(url,headers = headers)
+    print_response(r.text)
+    r.raise_for_status()
+    return(r)
+
+def http_post(url,headers,data):
+    r=requests.get(url,headers = headers,data=data)
+    print_response(r.text)
+    r.raise_for_status()
+    return(r)
+
 parser=argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,allow_abbrev=False,description="ISE Intune Test Tool")
 parser.add_argument("-a",metavar="<appid>",help="Azure Client or App ID",required=True)
 parser.add_argument("-t",metavar="<tenantid>",help="Azure Tenant ID",required=True)
 parser.add_argument("-c",metavar="<certfile>",help="Path to certificate file",type=argparse.FileType("rb"),required=True)
 parser.add_argument("-k",metavar="<keyfile>",help="Path to key file",type=argparse.FileType("rb"),required=True)
-parser.add_argument("-d",metavar="<level>",help="Debug level. 1-Warning (default), 2-Verbose, 3-Debug",type=int,default=1,choices=[1,2,3])
 lookup_group=parser.add_mutually_exclusive_group(required=True)
-lookup_group.add_argument("-i",metavar="<id>",help="Device ID (GUID or MAC)")
+lookup_group.add_argument("-i",help="Get MDM Info",action="store_true")
 lookup_group.add_argument("-l",help="List all non-compliant devices",action="store_true")
+lookup_group.add_argument("-q",metavar="<id>",help="Query Intune by Device ID (GUID or MAC)")
+parser.add_argument("-d",metavar="<level>",help="Debug level. 1-Warning (default), 2-Verbose, 3-Debug",type=int,default=1,choices=[1,2,3])
 args=parser.parse_args()
 
 tenant_id=args.t
 client_id=args.a
 
-if not args.l:
-    if re.search(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",args.i,re.IGNORECASE):
-        device_id=args.i
+if args.q:
+    if re.search(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",args.q,re.IGNORECASE):
+        device_id=args.q
         api_ver=3
-    elif re.search(r"^[0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}$|^[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}$|^[0-9a-f]{12}$",args.i,re.IGNORECASE):
-        device_id=re.sub(r"[\.:\-]","",args.i).upper()
+    elif re.search(r"^[0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}$|^[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}$|^[0-9a-f]{12}$",args.q,re.IGNORECASE):
+        device_id=re.sub(r"[\.:\-]","",args.q).upper()
         api_ver=2
     else:
         parser.error("Invalid device identifier specified in -i. Accepted MAC formats: HHHHHHHHHHHH, HH:HH:HH:HH:HH:HH, HH-HH-HH-HH-HH-HH and HHHH.HHHH.HHHH.")
@@ -86,16 +110,15 @@ jwt_token = jwt.encode(
 logging.debug(f"Assertion: {jwt_token}")
 
 logging.info("Attempting to get bearer token for graph.microsoft.com")
-r=requests.post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/token",
-                data={
+r=http_post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/token",
+                {},
+                {
                     "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
                     "resource": "https://graph.microsoft.com",
                     "grant_type": "client_credentials",
                     "scope": "openid",
                     "client_assertion": jwt_token
                 })
-logging.debug(f"Received {pformat(r.json())}")
-r.raise_for_status()
 try:
     graph_token=r.json()["access_token"]
 except:
@@ -106,12 +129,10 @@ logging.debug(f"API Token: {graph_token}")
 logging.debug(f"Decoded: {pformat(jwt.decode(graph_token,options={'verify_signature':False}))}")
 
 logging.info("Attempting to retrieve API endpoints")
-endpoints=requests.get("https://graph.microsoft.com//v1.0/servicePrincipals/appId=0000000a-0000-0000-c000-000000000000/endpoints",
-                       headers = {
+endpoints=http_get("https://graph.microsoft.com//v1.0/servicePrincipals/appId=0000000a-0000-0000-c000-000000000000/endpoints",
+                       {
                            "Authorization": f"Bearer {graph_token}"
                        })
-r.raise_for_status()
-
 try:
     for endpoint in endpoints.json()["value"]:
         if endpoint["providerName"]=="NACAPIService":
@@ -127,7 +148,8 @@ logging.info(f"API Version 3 Endpoint: {v3endpoint}")
 
 
 logging.info("Attempting to get bearer token api.manage.microsoft.com")
-r=requests.post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/token",
+r=http_post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/token",
+                {},
                 data={
                     "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
                     "resource": "https://api.manage.microsoft.com/",
@@ -136,8 +158,6 @@ r=requests.post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/token",
                     "client_assertion": jwt_token
                 })
 
-logging.debug(f"Received {pformat(r.json())}")
-r.raise_for_status()
 try:
     api_token=r.json()["access_token"]
 except:
@@ -154,18 +174,25 @@ headers={
 
 if args.l:
     logging.info("Attempting to retrieve all Non-Compliant devices")
-    r=requests.get(f"{v3endpoint}/cisco/devices/?paging=0&querycriteria=compliance&value=false&deviceidentifier=guid&filter=all",headers = headers)
+    r=http_get(f"{v3endpoint}/cisco/devices/?paging=0&querycriteria=compliance&value=false&deviceidentifier=guid&filter=all",headers)
+elif args.i:
+    logging.info("Attempting to get API Version 2 Information")
+    r2=http_get(f"{v2endpoint}/ciscoise/mdminfo/?ise_api_version=2",headers)
+    logging.info("Attempting to get API Version 3 Information")
+    r3=http_get(f"{v3endpoint}/ciscoise/mdminfo/?ise_api_version=3",headers)
 elif api_ver==2:
     logging.info(f"Attempting to query by MAC Address {device_id}")
-    r=requests.get(f"{v2endpoint}/ciscodeviceinfo/mdm/api/devices/?paging=0&querycriteria=macaddress&value={device_id}&filter=all",headers = headers)
+    r=http_get(f"{v2endpoint}/ciscodeviceinfo/mdm/api/devices/?paging=0&querycriteria=macaddress&value={device_id}&filter=all",headers)
 else:
     logging.info(f"Attempting to query by GUID {device_id}")
-    r=requests.get(f"{v3endpoint}/cisco/devices/?paging=0&querycriteria=guid&value={device_id}&filter=all",headers = headers)
+    r=http_get(f"{v3endpoint}/cisco/devices/?paging=0&querycriteria=guid&value={device_id}&filter=all",headers)
 
-logging.debug(f"Received {r.text}")
-r.raise_for_status()
 try:
-    print(xml.dom.minidom.parseString(r.text).toprettyxml())
+    if args.i:
+        print(f"Version 2 Info:\n{xml.dom.minidom.parseString(r2.text).toprettyxml()}")
+        print(f"Version 3 Info:\n{xml.dom.minidom.parseString(r3.text).toprettyxml()}")
+    else:
+        print(xml.dom.minidom.parseString(r.text).toprettyxml())
 except:
     logging.error("Failed to process the output")
     sys.exit(1)
