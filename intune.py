@@ -61,7 +61,7 @@ if args.q:
         device_id=re.sub(r"[\.:\-]","",args.q).upper()
         api_ver=2
     else:
-        parser.error("Invalid device identifier specified in -i. Accepted MAC formats: HHHHHHHHHHHH, HH:HH:HH:HH:HH:HH, HH-HH-HH-HH-HH-HH and HHHH.HHHH.HHHH.")
+        parser.error("Invalid device identifier specified in -q. Accepted MAC formats: HHHHHHHHHHHH, HH:HH:HH:HH:HH:HH, HH-HH-HH-HH-HH-HH and HHHH.HHHH.HHHH.")
 
 debug_level=[logging.WARNING,logging.INFO,logging.DEBUG][args.d-1]
 if args.d==3:
