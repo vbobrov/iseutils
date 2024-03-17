@@ -27,13 +27,13 @@ def print_response(text):
 
 
 def http_get(url,headers):
-    r=requests.get(url,headers = headers,verify=False)
+    r=requests.get(url,headers = headers)
     print_response(r.text)
     r.raise_for_status()
     return(r)
 
 def http_post(url,headers,data):
-    r=requests.post(url,headers = headers,data=data,verify=False)
+    r=requests.post(url,headers = headers,data=data)
     print_response(r.text)
     r.raise_for_status()
     return(r)
