@@ -13,6 +13,8 @@ This tool simulates MDM connectivity to Intune the same way as ISE connecting to
 
 Be sure to check out my post about ISE and Intune integration at https://www.securityccie.net/2023/02/09/intune-for-ise-engineer/
 
+The tool is updated to support Azure AD V2.0 API endpoints that was introduced in ISE 3.3 and backported to ISE 3.1 Patch 8 and ISE 3.2 Patch 4
+
 This tool requires the same parameters that ISE uses to reach Intune:
 - Tenant ID
 - Client ID aka App Registration ID
@@ -37,6 +39,7 @@ Here is full usage help for the tool:
     -t <tenantid>  Azure Tenant ID
     -c <certfile>  Path to certificate file
     -k <keyfile>   Path to key file
+    -n             Use V2.0 endpoint. ISE 3.3, ISE 3.2p4+ and ISE 3.1p8+
     -i             Get MDM Info
     -l             List all non-compliant devices
     -q <id>        Query Intune by Device ID (GUID or MAC)

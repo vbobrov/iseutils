@@ -27,13 +27,13 @@ def print_response(text):
 
 
 def http_get(url,headers):
-    r=requests.get(url,headers = headers)
+    r=requests.get(url,headers = headers,verify=False)
     print_response(r.text)
     r.raise_for_status()
     return(r)
 
 def http_post(url,headers,data):
-    r=requests.get(url,headers = headers,data=data)
+    r=requests.post(url,headers = headers,data=data,verify=False)
     print_response(r.text)
     r.raise_for_status()
     return(r)
@@ -43,6 +43,7 @@ parser.add_argument("-a",metavar="<appid>",help="Azure Client or App ID",require
 parser.add_argument("-t",metavar="<tenantid>",help="Azure Tenant ID",required=True)
 parser.add_argument("-c",metavar="<certfile>",help="Path to certificate file",type=argparse.FileType("rb"),required=True)
 parser.add_argument("-k",metavar="<keyfile>",help="Path to key file",type=argparse.FileType("rb"),required=True)
+parser.add_argument("-n",help="Use V2.0 endpoint. ISE 3.3, ISE 3.2p4+ and ISE 3.1p8+",action="store_true",default=False)
 lookup_group=parser.add_mutually_exclusive_group(required=True)
 lookup_group.add_argument("-i",help="Get MDM Info",action="store_true")
 lookup_group.add_argument("-l",help="List all non-compliant devices",action="store_true")
@@ -57,9 +58,14 @@ if args.q:
     if re.search(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",args.q,re.IGNORECASE):
         device_id=args.q
         api_ver=3
+        query_criteria="guid"
     elif re.search(r"^[0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}[:\-][0-9a-f]{2}$|^[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}$|^[0-9a-f]{12}$",args.q,re.IGNORECASE):
         device_id=re.sub(r"[\.:\-]","",args.q).upper()
-        api_ver=2
+        if args.n:
+            api_ver=3
+            query_criteria="macaddress"
+        else:
+            api_ver=2
     else:
         parser.error("Invalid device identifier specified in -q. Accepted MAC formats: HHHHHHHHHHHH, HH:HH:HH:HH:HH:HH, HH-HH-HH-HH-HH-HH and HHHH.HHHH.HHHH.")
 
@@ -73,6 +79,9 @@ requests_log.propagate=True
 
 logging.info(f"Attempting to load certificate from {args.c.name}")
 cert = x509.load_pem_x509_certificate(args.c.read(), default_backend())
+logging.debug("Getting Base64 certificate string")
+cert_der = cert.public_bytes(encoding=serialization.Encoding.DER)
+cert_pem = base64_encoded_certificate = base64.b64encode(cert_der).decode()
 logging.debug("Calculating SHA1 Thumbprint")
 thumbprint = cert.fingerprint(hashes.SHA1())
 thumbprint_text=thumbprint.hex()
@@ -105,20 +114,36 @@ jwt_token = jwt.encode(
     payload,
     private_key,
     algorithm='RS256',
-    headers={"x5t": thumbprint_base64}
+    headers={
+        "x5t": thumbprint_base64,
+        "x5c": [cert_pem]
+        }
 )
 logging.debug(f"Assertion: {jwt_token}")
 
 logging.info("Attempting to get bearer token for graph.microsoft.com")
-r=http_post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/token",
-                {},
-                {
-                    "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-                    "resource": "https://graph.microsoft.com",
-                    "grant_type": "client_credentials",
-                    "scope": "openid",
-                    "client_assertion": jwt_token
-                })
+if args.n:
+    r=http_post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+                    {},
+                    {
+                        "client_info": "1",
+                        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                        "grant_type": "client_credentials",
+                        "scope": "https://graph.microsoft.com/.default openid profile offline_access",
+                        "client_id": client_id,
+                        "client_assertion": jwt_token,
+
+                    }) 
+else:
+    r=http_post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/token",
+                    {},
+                    {
+                        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                        "resource": "https://graph.microsoft.com",
+                        "grant_type": "client_credentials",
+                        "scope": "openid",
+                        "client_assertion": jwt_token
+                    })
 try:
     graph_token=r.json()["access_token"]
 except:
@@ -146,17 +171,29 @@ except:
 logging.info(f"API Version 2 Endpoint: {v2endpoint}")
 logging.info(f"API Version 3 Endpoint: {v3endpoint}")
 
-
 logging.info("Attempting to get bearer token api.manage.microsoft.com")
-r=http_post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/token",
-                {},
-                data={
-                    "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-                    "resource": "https://api.manage.microsoft.com/",
-                    "grant_type": "client_credentials",
-                    "scope": "openid",
-                    "client_assertion": jwt_token
-                })
+
+if args.n:
+    r=http_post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+                    {},
+                    data={
+                        "client_info": "1",
+                        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                        "grant_type": "client_credentials",
+                        "scope": "openid https://api.manage.microsoft.com//.default profile offline_access",
+                        "client_id": client_id,
+                        "client_assertion": jwt_token
+                    })
+else:
+    r=http_post(f"https://login.microsoftonline.com/{tenant_id}/oauth2/token",
+                    {},
+                    data={
+                        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                        "resource": "https://api.manage.microsoft.com/",
+                        "grant_type": "client_credentials",
+                        "scope": "openid",
+                        "client_assertion": jwt_token
+                    })
 
 try:
     api_token=r.json()["access_token"]
@@ -181,11 +218,11 @@ elif args.i:
     logging.info("Attempting to get API Version 3 Information")
     r3=http_get(f"{v3endpoint}/ciscoise/mdminfo/?ise_api_version=3",headers)
 elif api_ver==2:
-    logging.info(f"Attempting to query by MAC Address {device_id}")
+    logging.info(f"Attempting to query V2 endpoint for {device_id}")
     r=http_get(f"{v2endpoint}/ciscodeviceinfo/mdm/api/devices/?paging=0&querycriteria=macaddress&value={device_id}&filter=all",headers)
 else:
-    logging.info(f"Attempting to query by GUID {device_id}")
-    r=http_get(f"{v3endpoint}/cisco/devices/?paging=0&querycriteria=guid&value={device_id}&filter=all",headers)
+    logging.info(f"Attempting to query V3 endpoint for {device_id}")
+    r=http_get(f"{v3endpoint}/cisco/devices/?paging=0&querycriteria={query_criteria}&value={device_id}&filter=all",headers)
 
 try:
     if args.i:
