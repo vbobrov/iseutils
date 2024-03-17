@@ -79,9 +79,6 @@ requests_log.propagate=True
 
 logging.info(f"Attempting to load certificate from {args.c.name}")
 cert = x509.load_pem_x509_certificate(args.c.read(), default_backend())
-logging.debug("Getting Base64 certificate string")
-cert_der = cert.public_bytes(encoding=serialization.Encoding.DER)
-cert_pem = base64_encoded_certificate = base64.b64encode(cert_der).decode()
 logging.debug("Calculating SHA1 Thumbprint")
 thumbprint = cert.fingerprint(hashes.SHA1())
 thumbprint_text=thumbprint.hex()
@@ -116,8 +113,7 @@ jwt_token = jwt.encode(
     algorithm='RS256',
     headers={
         "x5t": thumbprint_base64,
-        "x5c": [cert_pem]
-        }
+    }
 )
 logging.debug(f"Assertion: {jwt_token}")
 
