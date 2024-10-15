@@ -207,7 +207,7 @@ headers={
 
 if args.l:
     logging.info("Attempting to retrieve all Non-Compliant devices")
-    r=http_get(f"{v3endpoint}/cisco/devices/?paging=0&querycriteria=compliance&value=false&deviceidentifier=guid&filter=all",headers)
+    r=http_get(f"{v3endpoint}/cisco/devices/?paging=0&querycriteria=compliance&value=false&deviceidentifier=macaddress&filter=all",headers)
 elif args.i:
     logging.info("Attempting to get API Version 2 Information")
     r2=http_get(f"{v2endpoint}/ciscoise/mdminfo/?ise_api_version=2",headers)
